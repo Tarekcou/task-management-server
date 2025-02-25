@@ -24,7 +24,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server
-    await client.connect();
+    // await client.connect();
 
     // Define collections
     const projects = client.db("task-ManagementDB").collection("projects");
@@ -33,11 +33,11 @@ async function run() {
     // POST: Add a new project
     app.post("/projects", async (req, res) => {
       try {
-        const { name } = req.body;
+        const { name, email } = req.body;
         if (!name)
           return res.status(400).json({ message: "Project name is required" });
 
-        const newProject = { name, createdAt: new Date() };
+        const newProject = { name, email, createdAt: new Date() };
         const result = await projects.insertOne(newProject);
 
         res
@@ -50,8 +50,11 @@ async function run() {
     });
     // GET: Fetch all Project
     app.get("/projects", async (req, res) => {
+      const email = req.query.email;
       try {
-        const allProjects = await projects.find().toArray();
+        const query = { email };
+
+        const allProjects = await projects.find(query).toArray();
         res.json(allProjects);
       } catch (error) {
         console.error("Error fetching tasks:", error);
@@ -74,12 +77,14 @@ async function run() {
 
     // GET: Fetch tasks for a selected project
     app.get("/tasks/:project", async (req, res) => {
+      const email = req.query.email;
+
       try {
         const { project } = req.params; // ✅ Use req.query instead of req.body
         if (!project)
           return res.status(400).json({ message: "Project is required" });
 
-        const query = { project };
+        const query = { project, email };
         const projectTasks = await tasks.find(query).toArray();
         res.json(projectTasks);
       } catch (error) {
@@ -103,15 +108,26 @@ async function run() {
     // PUT: Update a task's category & position
     app.put("/tasks/:id", async (req, res) => {
       const { id } = req.params;
-      const { category, position } = req.body;
+      console.log("id", id);
+      const { category, title, description, position } = req.body;
+      console.log("id", id, category, position);
 
       try {
         const result = await tasks.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { category, position } }
+          {
+            $set: {
+              category,
+              title,
+              description,
+              position,
+              updatedAt: new Date(),
+            },
+          }
         );
-
+        console.log(result);
         if (result.modifiedCount === 1) {
+          console.log("success");
           res.json({ success: true, message: "Task updated" });
         } else {
           res.status(404).json({ success: false, message: "Task not found" });
@@ -121,6 +137,24 @@ async function run() {
         res
           .status(500)
           .json({ success: false, message: "Internal server error" });
+      }
+    });
+
+    app.put("/tasks/update-order", async (req, res) => {
+      try {
+        const { tasks } = req.body;
+
+        // Loop through and update each task's position and category
+        for (const task of tasks) {
+          await TaskModel.findByIdAndUpdate(task._id, {
+            category: task.category,
+            position: task.position,
+          });
+        }
+
+        res.status(200).json({ message: "Task order updated successfully" });
+      } catch (error) {
+        res.status(500).json({ error: "Failed to update task order" });
       }
     });
 
